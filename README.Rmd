@@ -1,6 +1,13 @@
 ---
-output: github_document
+title: "ImprovAFish_high_dosage"
+author: "Shashank Gupta"
+date: "2023-02-03"
+output:
+  html_document:
+    toc: true
+    theme: united
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
