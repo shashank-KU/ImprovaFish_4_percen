@@ -2,8 +2,7 @@
 title: "ImprovAFish_high_dosage"
 author: "Shashank Gupta"
 date: "2023-02-03"
-output:
-  html_document:
+output: github_document
     toc: true
     theme: united
 ---
