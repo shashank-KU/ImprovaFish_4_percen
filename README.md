@@ -1,0 +1,736 @@
+---
+title: "ImprovAFish_high_dosage"
+author: "Shashank Gupta"
+date: "2023-02-03"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 4  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Feed-microbiome-host interactions in Atlantic salmon over life stages
+To meet future food demands, more efficient and sustainable animal production systems are needed. Given the crucial importance of the gut microbiota to animal (host) health and nutrition, selective enhancement of beneficial microbes via prebiotics may be a powerful approach for promoting farmed fish welfare and robustness. In this study, we employed three versions of a beta-mannan prebiotic that were fed to Atlantic salmon and explored the combined responses of both gut microbiota and the host from freshwater to seawater life stages. We have used weighted gene co-expression network analysis (WGCNA) of host RNA-seq and microbial 16S rRNA amplicon sequencing data to identify biological interactions between the gut ecosystem and the host. We observed several microbial and host modules through WGCNA that were significantly correlated with life stage, but not with diet. Microbial diversity was highest in the early life of Atlantic salmon and decreased over time. In particular, Lactobacillus and Paraburkholderia were the dominating genera and showed the highest correlation with host modules. Our findings demonstrate that salmon-microbiota interactions are mainly influenced by life stage, while further research is required to determine whether supplementation of selected prebiotics to diet can be used to modulate the salmon gut microbiota for improving host health and production sustainability.
+
+
+
+## Getting Started
+### Step 1. Package dependencies in R
+Installing R packages can be done through various sources such as GitHub, the Comprehensive R Archive Network (CRAN), or by following the official website of the package.
+
+To install a package from GitHub, use the devtools package and the `install_github()` function. For example, to install the "ggplot2" package from GitHub, run the following code:
+```
+library(devtools)
+install_github("ggplot2")
+```
+To install a package from CRAN, use the `install.packages()` function. For example, to install the "dplyr" package from CRAN, run the following code:
+```
+install.packages("dplyr")
+```
+Finally, to install a package from its official website, download the package source code, and use the `install.packages()` function with the local file path as the argument. For example, to install the "reshape2" package from its official website, first download the source code, then run the following code:
+
+```
+install.packages("path/to/reshape2_package.tar.gz", repos = NULL, type = "source")
+```
+It is recommended to regularly update the installed packages to ensure compatibility and to benefit from new features and bug fixes.
+
+### Step 2. Shell script
+Primers were removed from the raw paired-end FASTQ files generated via MiSeq using “cutadapt”. Further, reads were analyzed by QIIME2 (qiime2-2021.8) pipeline through dada2 to infer the ASVs present and their relative abundances across the samples. For bed dust samples, using read quality scores for the dataset, forward and reverse reads were truncated at 280 bp and 260 bp, followed by trimming the 5′ end till 25 bp for both forward and reverse reads, respectively; other quality parameters used dada2 default values for both 16S rRNA gene sequencing. For 16S rRNA gene sequencing, taxonomy was assigned using a pre-trained Naïve Bayes classifier (Silva database, release 138, 99% ASV) were used.
+
+The code is a shell script for processing paired-end sequencing data in order to perform a microbial analysis. It uses a combination of bash commands and QIIME2 (Quantitative Insights Into Microbial Ecology) commands.
+
+``` {r eval = FALSE}
+ls -d -1 data/*_R1* > forward.txt
+ls -d -1 data/*_R2* > reverse.txt
+
+mkdir Trimmed
+mkdir Trim.log
+
+parallel -j 1 --xapply "cutadapt -g CCTAYGGGRBGCASCAG -G GGACTACHVGGGTWTCTAAT --pair-filter=any --discard-untrimmed -o $PWD/Trimmed/{1/.}.gz -p $PWD/Trimmed/{2/.}.gz {1} {2} &> $PWD/Trim.log/{1/.}.log" :::: forward.txt :::: reverse.txt
+
+qiime tools import --type 'SampleData[PairedEndSequencesWithQuality]' --input-format CasavaOneEightSingleLanePerSampleDirFmt --input-path Trimmed/ --output-path demux-paired-end.qza
+
+qiime demux summarize --i-data demux-paired-end.qza --o-visualization step1_output.qzv
+
+qiime dada2 denoise-paired --i-demultiplexed-seqs demux-paired-end.qza --o-table table --o-representative-sequences rep-seqs  --p-trunc-len-f 270 --p-trunc-len-r 250 --p-n-threads 4 --o-denoising-stats denoising-stats.qza --verbose &> dada2.log
+
+qiime metadata tabulate --m-input-file denoising-stats.qza --o-visualization step2_output.qzv
+
+# Creating Rooted Phylogenetic Tree
+echo "Align rep-seqs and created rooted tree"
+qiime alignment mafft --i-sequences rep-seqs.qza --o-alignment aligned-rep-seqs.qza --p-n-threads 4
+qiime alignment mask --i-alignment aligned-rep-seqs.qza --o-masked-alignment masked-aligned-rep-seqs.qza
+qiime phylogeny fasttree --i-alignment masked-aligned-rep-seqs.qza --o-tree unrooted-tree.qza --p-n-threads 4
+qiime phylogeny midpoint-root --i-tree unrooted-tree.qza --o-rooted-tree rooted-tree.qza
+echo "Rooted tree has been created"
+
+# Taxonomy classification
+echo "Classify rep-seqs using Silva132_99 classifier"
+qiime feature-classifier classify-sklearn --i-reads rep-seqs.qza --i-classifier silva_99_341F806R_classifier.qza --p-n-jobs 6 --o-classification taxonomy.qza
+echo "Classification done"
+
+# Export to biom file and import into phyloseq
+echo "Export data from qiime"
+qiime tools export  --input-path table.qza --output-path exported-feature-table
+qiime tools export  --input-path taxonomy.qza --output-path exported-feature-table
+echo "data has been exported"
+# change header of taxonomy file
+sed -i "1 s/^.*$/#OTUID\ttaxonomy\tconfidence/" exported-feature-table/taxonomy.tsv
+# fuse
+biom add-metadata -i exported-feature-table/feature-table.biom -o exported-feature-table/feature-table_taxonomy.biom --observation-metadata-fp exported-feature-table/taxonomy.tsv --observation-header OTUID,taxonomy,confidence --sc-separated taxonomy
+echo "BIOM file with OTU table and taxonomy saved as: exported-feature-table/feature-table_taxonomy.biom"
+# export tree
+qiime tools export --input-path  rooted-tree.qza --output-path exported-feature-table/
+echo "Rooted phylogenetic tree saved as: exported-feature-table/tree.nwk"
+# export rep-seqs
+qiime tools export  --input-path merged_rep-seqs.qza --output-path exported-feature-table/
+echo "Representative sequences saved as: exported-feature-table/dna-sequences.fasta"
+
+# Training the database
+wget https://www.arb-silva.de/fileadmin/silva_databases/qiime/Silva_132_release.zip
+unzip Silva_132_release.zip
+
+qiime tools import --type 'FeatureData[Sequence]' --input-path ./SILVA_132_QIIME_release/rep_set/rep_set_16S_only/99/silva_132_99_16S.fna  --output-path silva_99_seqs.qza
+
+qiime tools import --type 'FeatureData[Taxonomy]' --input-format HeaderlessTSVTaxonomyFormat --input-path ./SILVA_132_QIIME_release/taxonomy/16S_only/99/consensus_taxonomy_all_levels.txt --output-path silva_99_consensus_taxonomy.qza
+
+qiime feature-classifier extract-reads --i-sequences silva_99_seqs.qza --p-f-primer CCTAYGGGRBGCASCAG --p-r-primer GGACTACHVGGGTWTCTAAT --o-reads silva_99_341F806R.seqs.qza
+
+
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads silva_99_341F806R.seqs.qza --i-reference-taxonomy silva_99_consensus_taxonomy.qza --o-classifier silva_99_341F806R_classifier.qza --verbose &> silva_99_341F806R_classifier.log
+
+```
+
+All downstream analyses were performed on this normalized ASVs table unless mentioned. We used two alpha diversity indices, i.e., observed richness and Shannon diversity index. Furthermore, beta diversity was calculated using weighted and unweighted UniFrac metric and visualized by principal coordinates analysis (PCoA). Alpha and beta diversity was calculated using phyloseq v1.38.0 and visualized with ggplot2 v3.3.5 in R v4.1.1. Comparison of community richness and diversity was assessed by the Kruskal-Wallis test between all the groups, and comparison between the two groups was done by Wilcoxon test with Benjamini-Hochberg FDR multiple test correction. Significance testing between the groups for beta diversity was assessed using permutational multivariate analysis of variance (PERMANOVA) using the “vegan” package.
+
+### Step 3. Downstream analysis with R
+We require several packages-
+
+#### Load packages
+```{r warning=FALSE, message=FALSE}
+library("ranacapa")
+library("phyloseq")
+library("tidyverse")
+library("plyr")
+library("reshape2")
+library("reshape")
+library("tidyr")
+library("doBy")
+library("plyr")
+library("microbiome")
+library("ggpubr")
+library("vegan")
+library("tidyverse")
+library("magrittr")
+library("cowplot")
+library("dendextend")
+library("metagenomeSeq")
+library("decontam")
+library("RColorBrewer")
+library("ampvis2")
+```
+
+#### import data and clean the taxonomy
+
+```{r}
+# Load data
+raw <- import_biom("/Users/shashankgupta/Desktop/ImprovAFish/ImprovAFish_4%/ImprovaFish_4_percen/exported-feature-table/feature-table_taxonomy.biom")
+tree <- read_tree("/Users/shashankgupta/Desktop/ImprovAFish/ImprovAFish_4%/ImprovaFish_4_percen/exported-feature-table/tree.nwk")
+refseq <- Biostrings::readDNAStringSet("/Users/shashankgupta/Desktop/ImprovAFish/ImprovAFish_4%/ImprovaFish_4_percen/exported-feature-table/dna-sequences.fasta", use.names = TRUE)
+dat <- read.table("/Users/shashankgupta/Desktop/ImprovAFish/ImprovAFish_4%/ImprovaFish_4_percen/metadata.txt", header = TRUE,row.names = 1, sep = "\t")
+# Merge into one complete phyloseq object
+all <- merge_phyloseq(raw, sample_data(dat), tree, refseq)
+tax <- data.frame(tax_table(all), stringsAsFactors = FALSE)
+tax <- tax[,1:7] # No info in col 8-15
+# Set informative colnames
+colnames(tax) <- c("Kingdom", "Phylum","Class","Order","Family","Genus", "Species")
+library(stringr)
+tax.clean <- data.frame(row.names = row.names(tax),
+                        Kingdom = str_replace(tax[,1], "d__",""), 
+                        Phylum = str_replace(tax[,2], "p__",""),
+                        Class = str_replace(tax[,3], "c__",""),
+                        Order = str_replace(tax[,4], "o__",""),
+                        Family = str_replace(tax[,5], "f__",""),
+                        Genus = str_replace(tax[,6], "g__",""),
+                        Species = str_replace(tax[,7], "s__",""), 
+                        stringsAsFactors = FALSE)
+tax.clean[is.na(tax.clean)] <- ""
+
+# Remove remove ".", change "-" and " " to "_"
+for (i in 1:ncol(tax.clean)){
+  tax.clean[,i] <- str_replace_all(tax.clean[,i], "[.]","")
+  tax.clean[,i] <- str_replace_all(tax.clean[,i], "[(]","")
+  tax.clean[,i] <- str_replace_all(tax.clean[,i], "[)]","")
+  tax.clean[,i] <- str_replace_all(tax.clean[,i], "-","_")
+  tax.clean[,i] <- str_replace_all(tax.clean[,i], " ","_")
+}
+
+for (i in 1:7){ tax.clean[,i] <- as.character(tax.clean[,i])}
+# File holes in the tax table
+for (i in 1:nrow(tax.clean)){
+  #  Fill in missing taxonomy
+  if (tax.clean[i,2] == ""){
+    kingdom <- paste("Kingdom_", tax.clean[i,1], sep = "")
+    tax.clean[i, 2:7] <- kingdom
+  } else if (tax.clean[i,3] == ""){
+    phylum <- paste("Phylum_", tax.clean[i,2], sep = "")
+    tax.clean[i, 3:7] <- phylum
+  } else if (tax.clean[i,4] == ""){
+    class <- paste("Class_", tax.clean[i,3], sep = "")
+    tax.clean[i, 4:7] <- class
+  } else if (tax.clean[i,5] == ""){
+    order <- paste("Order_", tax.clean[i,4], sep = "")
+    tax.clean[i, 5:7] <- order
+  } else if (tax.clean[i,6] == ""){
+    family <- paste("Family_", tax.clean[i,5], sep = "")
+    tax.clean[i, 6:7] <- family
+  } else if (tax.clean[i,7] == ""){
+    tax.clean$Species[i] <- paste("Genus_",tax.clean$Genus[i], sep = "_")
+  }
+}
+
+tax_table(all) <- as.matrix(tax.clean)
+all
+all.clean <- subset_taxa(all, Kingdom != "Unassigned")
+all.clean <- prune_taxa(taxa_sums(all.clean) > 0, all.clean)
+all.clean <- subset_samples(all.clean, diet != "test")
+all.clean <- prune_taxa(taxa_sums(all.clean) > 0, all.clean)
+all.clean
+```
+#### Rarefaction plot
+This R code is using the "ggrare" function to create a rarefaction plot from the data in the "all.clean" object.
+
+```{r fig2, fig.height = 4, fig.width = 12, fig.align = "center"}
+p <- ggrare(all.clean, step = 1000, 
+            color = "New_Diet", 
+            label = "sampleType", se = F,
+            parallel = TRUE,
+            plot = FALSE)
+cols  <- c(brewer.pal(8,"Set1"), brewer.pal(7,"Dark2"),brewer.pal(7,"Set2"),brewer.pal(12,"Set3"),brewer.pal(7,"Accent"),brewer.pal(12,"Paired"),"gray")
+
+p <- p + theme_bw() + 
+  scale_fill_manual(values =cols) +
+  scale_colour_manual( values = cols) +
+  facet_wrap(~New_Diet)
+p
+
+```
+
+#### Alpha diversity
+Alpha diversity is a measure of the diversity of species within a given area or sample. It can be measured in two different ways: Shannon diversity, which takes into account both the richness and evenness of species in a given sample, or observed richness, which simply counts the total number of species present. Shannon diversity is often used to compare the diversity of different samples, whereas observed richness can be used to compare the diversity of different areas.
+
+```{r}
+# Estimate richness of all.clean
+shannon.div <- estimate_richness(all.clean, measures = c("Shannon", "Simpson", "Observed","Chao1"))
+
+# Get sample data
+sampledata1<- data.frame(sample_data(all.clean))
+
+# Rename row names
+row.names(shannon.div) <- gsub("X","", row.names(shannon.div))
+row.names(shannon.div) <- gsub("[.]","-", row.names(shannon.div))
+
+
+# Merge data
+sampleData <- merge(sampledata1, shannon.div, by = 0 , all = TRUE)
+
+# Factorize New_Diet
+sampleData$New_Diet <- factor(sampleData$New_Diet, levels=c( 'Control', '1%_betamannan', '4%_betamannan'))
+
+# List of comparisons
+my_comparisons <- list( c("Control", "1%_betamannan"), 
+                        c("Control", "4%_betamannan"), 
+                        c("1%_betamannan", "4%_betamannan"))
+
+# Create Observed Richness Plot
+p1 <- ggboxplot(sampleData, x = "New_Diet", y = "Observed",
+                color = "New_Diet", palette = "jco", legend = "none") + 
+  stat_compare_means(comparisons = my_comparisons) +
+  stat_compare_means(label.y = 400) +
+  geom_jitter(aes(colour = New_Diet), size = 2, alpha = 0.6) +
+  geom_boxplot(aes(fill = New_Diet), width=0.7, alpha = 0.5) +
+  theme_bw() +  theme(legend.position="none",axis.title.x=element_blank()) +  
+  scale_fill_manual(values = cols) + 
+  scale_colour_manual( values = cols) +
+  facet_wrap("sampleType")
+
+# Create Shannon Plot
+p2 <- ggboxplot(sampleData, x = "New_Diet", y = "Shannon",
+          color = "New_Diet", palette = "jco", legend = "none") + 
+  stat_compare_means(comparisons = my_comparisons) +
+  stat_compare_means(label.y = 5) +
+  geom_jitter(aes(colour = New_Diet), size = 2, alpha = 0.6) +
+  geom_boxplot(aes(fill = New_Diet), width=0.7, alpha = 0.5) +
+  theme_bw() +  theme(legend.position="none",axis.title.x=element_blank()) +
+  facet_wrap("sampleType")
+
+
+```
+
+#### Beta diversity
+
+Beta diversity is a term used to refer to the differences in species composition between two different sites or habitats. It is often used to measure how different species are distributed across a landscape. The concept of beta diversity was first proposed by ecologist Robert H. Whittaker in 1960. The measure is used to quantify the variation in species composition between two different sites, such as an island and the mainland. The most commonly used measure for beta diversity is the Bray-Curtis index, which looks at the ratio of shared species between two sites. This index is used to measure the differences in species composition between areas and to identify the importance of certain areas in terms of species diversity.
+
+```{r warning=FALSE, message=FALSE, fig.align='center', fig.width=14, fig.height=14}
+# Calculate PCoA on Bray distance
+PCoA_bray <- ordinate(physeq = all.clean, method = "PCoA", distance = "bray")
+
+# Plot PCoA on Bray distance
+PCoA_bray_plot <- plot_ordination(
+  physeq = all.clean, 
+  ordination = PCoA_bray, 
+  color = "New_Diet"
+) + 
+  geom_point(shape = 19, alpha=0.7) + 
+  theme_bw() + ggtitle("PCoA Plot - Bray") + 
+  xlab("PCoA 1 [43.5 %]") + ylab("PCoA 2 [27.5 %]") + 
+  stat_ellipse() + scale_fill_manual(values = cols) + 
+  scale_colour_manual( values = cols) + 
+  facet_wrap("sampleType")
+
+# Grid plot of PCoA plots
+bottom_row <- plot_grid(p1, p2, labels = c('A', 'B'), align = 'h', rel_widths = c(1, 1))
+plot_grid(bottom_row, PCoA_bray_plot, labels = c('', 'C'), ncol = 1)
+```
+
+
+```{r warning=FALSE, message=FALSE, fig.align='center'}
+psdata.r<- transform_sample_counts(all.clean, function(x) x / sum(x) )
+Final.RNA <- aggregate_rare(psdata.r, level = "Phylum", detection = 1/100, prevalence = 20/100)
+getPalette = colorRampPalette(brewer.pal(10, "Dark2")) 
+PhylaPalette = getPalette(10)
+
+Final.RNA_phylum_plot<- plot_composition(Final.RNA, sample.sort = "Proteobacteria",otu.sort = "abundance", verbose = TRUE)
+Final.RNA_phylum_plot <- Final.RNA_phylum_plot + 
+  theme_bw() + 
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+  scale_fill_manual(values = PhylaPalette)
+
+Final.RNA_phylum_plot
+```
+
+
+
+```{r}
+#Bacterial Community Composition for Manuscript
+Final.seq.melt.RNA <- psmelt(tax_glom(psdata.r, "Species"))
+tax_ranks <- c("Phylum", "Class", "Order", "Family", "Genus", "Species")
+
+for (rank in tax_ranks) {
+  n_unique <- length(unique(Final.seq.melt.RNA[[rank]]))
+  message(paste(rank, ": ", n_unique, sep = ""))
+}
+
+```
+
+
+```{r echo=FALSE}
+#' Relative Abundance Plot
+#' For creating nice microbiome plots
+rabuplot <- function(phylo_ob,
+                     predictor="none",
+                     type="genus",
+                     relative_abun=TRUE,
+                     xlabs = "Relative abundance (%)",
+                     ylabs = "Average relative abundance",
+                     main = "Relative abundance plot",
+                     violin=TRUE,
+                     violin_scale = "width",
+                     legend_title=predictor,
+                     N_taxa=NULL,
+                     By_median=TRUE,
+                     no_other_type=FALSE,
+                     legend_names=NULL,
+                     Time="Time",
+                     Timepoint=NULL,
+                     Strata=NULL,
+                     Strata_val="1",
+                     no_legends = FALSE,
+                     no_names=FALSE,
+                     italic_names=TRUE,
+                     Only_sig=FALSE,
+                     log=TRUE,
+                     log_max=100,
+                     stat_out=FALSE,
+                     p_val = TRUE,
+                     p_stars=FALSE,
+                     stats="non-parametric",
+                     p_adjust=FALSE,
+                     p_adjust_method="fdr",
+                     p_adjust_full=FALSE,
+                     colors=NULL,
+                     color_by=NULL,
+                     order=TRUE,
+                     reverse=FALSE,
+                     list_taxa=NULL,
+                     select_taxa=NULL,
+                     select_type="genus",
+                     bar_chart=FALSE,
+                     bar_chart_stacked=FALSE,
+                     facet_wrap=NULL,
+                     facet_label=NULL,
+                     facet_n=TRUE,
+                     percent=FALSE,
+                     order_by="Time",
+                     order_val=NULL)
+{
+  if(!is.null(list_taxa) & is.null(N_taxa)) N_taxa = length(list_taxa)
+  if(is.null(N_taxa) & is.null(list_taxa)) N_taxa=15
+  options(dplyr.summarise.inform = FALSE)
+  if(bar_chart_stacked==TRUE & bar_chart==FALSE) {
+    bar_chart=TRUE
+    p_val=FALSE
+  }
+  if(predictor=="none") {
+    sample_data(phylo_ob)$none <- "All samples"
+    p_val=FALSE
+    if(bar_chart_stacked==FALSE & is.null(color_by)) no_legends = TRUE
+  }
+  phylo_ob <- prune_samples(sample_sums(phylo_ob)>0,phylo_ob) #removes empty samples;
+  otu_mat <- as(otu_table(phylo_ob), "matrix")
+  if(taxa_are_rows(phylo_ob)) otu_mat <- t(otu_mat)
+  if(!is.null(facet_wrap)) index <- !is.na(get_variable(phylo_ob, predictor)) & !is.na(get_variable(phylo_ob, facet_wrap))
+  else   index <- !is.na(get_variable(phylo_ob, predictor))
+  if(length(unique(index)) !=1) message(paste(length(which(index==F)), "samples have been removed from full dataset (predictor/facet_wrap NAs)"))
+  otu_mat <- otu_mat[index,]
+  otu_mat  <- otu_mat[,colSums(otu_mat)>0] #removes empty OTUs;
+  OTU_index <- colnames(otu_mat)
+  tax <- as(tax_table(phylo_ob), "matrix") %>% data.frame(stringsAsFactors=FALSE)
+  tax <- tax[rownames(tax) %in% OTU_index,]
+  tax[is.na(tax)] <- "unclassified"
+  tax[tax==""] <- "unclassified"
+  names(tax) <- tolower(names(tax))
+  type <- tolower(type)
+  if(!is.null(select_type)) select_type <- tolower(select_type)
+  tax$OTU <- rownames(tax)
+  samp <- data.frame(sample_data(phylo_ob), stringsAsFactors=TRUE)
+  samp <- samp[index,]
+  if(is.null(facet_wrap)) samp$wrap <- ""
+  if(!is.null(facet_wrap)) samp$wrap <- samp[,facet_wrap]
+  if(!is.null(Timepoint)){
+    index <- rownames(samp[(samp[,Time] ==Timepoint),])
+    otu_mat <- otu_mat[rownames(otu_mat) %in% index,]
+    otu_mat  <- otu_mat[,colSums(otu_mat)>0] #removes empty OTUs;
+    OTU_index <- colnames(otu_mat)
+    tax <- tax[rownames(tax) %in% OTU_index,]
+    samp <- samp[rownames(samp) %in% index,]
+  }
+
+  list <-as.character(tax[,type])
+  unique_tax <- unique(list)
+
+  abund <- as.data.frame(matrix(rep(0,(length(unique_tax)*nrow(otu_mat))),ncol=length(unique_tax)))
+  row.names(abund) <- row.names(otu_mat)
+  names(abund) <- unique_tax
+  for(i in names(abund)){
+    if(is.array(otu_mat[,list==i]))  abund[,i] <- rowSums(otu_mat[,list== i])
+    else   abund[,i] <- otu_mat[,list== i]
+  }
+  abund_org <- abund
+  if(relative_abun==TRUE) abund <- apply(abund,1,function(x) x/sum(x)) %>% t %>% as.data.frame()
+
+  if (is.null(list_taxa) & !is.null(select_taxa)) {
+    list_taxa <- NULL
+    for(i in 1:length(select_taxa)){
+      list_taxa <- c(list_taxa,(as.character(unique(tax[grep(select_taxa[[i]],tax[,select_type],ignore.case=TRUE),type]))))
+    }
+  }
+  if (!is.null(list_taxa)) {
+    no_other_type <- TRUE
+    if (is.null(N_taxa)) N_taxa <- length(list_taxa)
+    abund <- abund[,colnames(abund) %in% list_taxa, drop = FALSE]
+    unique_tax <- names(abund)
+  }
+
+  if(length(abund)>1){
+    index <- !is.na(rownames(samp))
+    if (!is.null(order_val))  index <- samp[,order_by] ==order_val
+    abund <- abund[,order(-colSums(abund[index,]))]
+    if (By_median)  abund <- abund[,order(-apply(abund[index,], 2, median))]
+    if("unclassified" %in% unique_tax) abund <- abund[c(setdiff(names(abund), "unclassified"),"unclassified")] #Move unclassified to end
+    if(N_taxa<length(unique_tax) ){
+      abund[,paste("Other",type)] <- rowSums(abund[(length(unique_tax)-(length(unique_tax)-N_taxa)+1):length(unique_tax)])
+      abund <- abund[-(length(unique_tax)-(length(unique_tax)-N_taxa)+1):-length(unique_tax)]
+    }
+    if(no_other_type)  abund[,paste("Other",type)] <- NULL
+  }
+  index <- !is.na(rownames(samp))
+  if(!is.null(Strata)) index <- samp[,Strata]==Strata_val
+  samp2 <- samp %>% filter(index)
+  if(p_val==TRUE & (bar_chart==FALSE | (bar_chart==TRUE & bar_chart_stacked==FALSE))){
+    if(p_adjust_full ==TRUE | stats=="mgs_feature"){
+      abund2 <- abund_org %>% filter(index)
+      if(relative_abun==TRUE & stats!="mgs_feature") abund2 <- apply(abund2,1,function(x) x/sum(x)) %>% t %>% as.data.frame()
+    }
+    else abund2 <- abund %>% filter(index)
+    pred <- samp2[,predictor]
+
+    if(stats=="mgs_feature" & length(levels(factor(pred)))>2){
+      stats="non-parametric"
+      message("MGS not available for >2 predictors, switching to non-parametric")
+    }
+    pval <- data.frame()
+    for (i in 1:length(unique(samp2$wrap))){
+      index <- samp2$wrap==unique(samp2$wrap)[[i]]
+      abund3 <- abund2 %>% filter(index)
+      pred <- samp2[index,predictor]
+      # test with featureModel
+      if(stats=="mgs_feature"){
+        mgs <- metagenomeSeq::newMRexperiment(counts = t(abund3))
+        mgsp <- metagenomeSeq::cumNormStat(mgs)
+        mgs <- metagenomeSeq::cumNorm(mgs, mgsp)
+        mod <- model.matrix(~as.numeric(pred == unique(pred)[1]))
+        if(length(unique(samp2$wrap))>1) message(paste0("MGS FeatureModel for facet_wrap = ",unique(samp2$wrap)[[i]]))
+        else message("MGS FeatureModel")
+        mgsfit <- metagenomeSeq::fitFeatureModel(obj=mgs,mod=mod)
+        pval_tmp <- data.frame(variable=mgsfit$taxa,pval=mgsfit$pvalues)
+      }
+      if(stats=="non-parametric"){   #Kruskal-Wallis
+        if(i==1) message("Non-parametric statistics")
+        pval_tmp <- cbind(abund3,pred) %>% as_tibble() %>%
+          gather(variable, value,-"pred") %>%
+          group_by(variable) %>%
+          summarize(pval = kruskal.test(value ~ pred)$p.value, .groups = 'drop')
+      }
+      if(stats=="parametric"){
+        if(i==1) message("Parametric statistics")
+        pval_tmp <- cbind(abund3,pred) %>% as_tibble() %>%
+          gather(variable, value,-"pred") %>%
+          group_by(variable) %>%
+          summarize(pval = oneway.test(value ~ pred)$p.value, .groups = 'drop')
+      }
+      pval_tmp <- pval_tmp %>%
+        mutate(wrap=unique(samp2$wrap)[[i]],p_adjust=p.adjust(pval, p_adjust_method))
+      pval <- rbind(pval,pval_tmp)
+    }
+    if(p_adjust) message(paste(p_adjust_method,"correction applied for",length(unique(pval$variable)),"taxa"))
+  }
+
+  bacteria <- rev(names(abund))
+  subset <- cbind(samp[!names(samp) %in% bacteria], abund) #fjerner evt eksisterende navne fra dataset og merger;
+  subset$predictor2 <-  as.factor(subset[,predictor])
+  subset$ID <- rownames(subset)
+  if(!is.null(Strata)) subset[,Strata] <- as.factor(subset[,Strata])
+  if(!is.null(facet_wrap)){
+    subset$wrap <-  as.factor(subset[,facet_wrap])
+    if(!is.null(Strata))
+      molten <- subset[,c("ID",paste(bacteria),"predictor2",Strata,"wrap")] %>% gather(variable, value,-"predictor2",-"ID",-all_of(Strata),-"wrap")
+    else
+      molten <- subset[,c("ID",paste(bacteria),"predictor2","wrap")] %>% gather(variable, value,-"predictor2",-"ID",-"wrap")
+  }
+  if(is.null(facet_wrap)){
+    if(!is.null(Strata))
+      molten <- subset[,c("ID",paste(bacteria),"predictor2",Strata)] %>% gather(variable, value,-"predictor2",-"ID",-all_of(Strata))
+    else
+      molten <- subset[,c("ID",paste(bacteria),"predictor2")] %>% gather(variable, value,-"predictor2",-"ID")
+  }
+  if(!is.null(color_by)){
+    molten[molten$variable != paste("Other",type),"colvar"] <- molten %>% dplyr::filter(variable != paste("Other",type)) %>% .[,"variable"] %>% match(tax[,type]) %>% tax[.,color_by] %>% as.character
+    molten[molten$variable == paste("Other",type),"colvar"] <- paste("Other",color_by) %>% as.character
+  }
+
+  molten$variable <- gsub('_',' ',molten$variable)
+
+  if(order)   ordered <- unique(molten$variable) #level order
+  if(!order)   ordered <-sort(unique(molten$variable))#level order alphabetically
+
+  molten$variable <- factor(molten$variable, levels=ordered)
+  if(is.null(color_by))  molten$colvar <- molten$variable
+  if(!is.null(Strata))  molten <- molten[which(molten[,Strata]==Strata_val), ]
+
+  if(is.null(colors)){
+    cols  <- c(brewer.pal(8,"Set1"), brewer.pal(7,"Dark2"),brewer.pal(7,"Set2"),brewer.pal(12,"Set3"),brewer.pal(7,"Accent"),brewer.pal(12,"Paired"),"gray")
+    cols <- cols[1:length(levels(factor(molten$predictor2)))]
+  }
+  if(!is.null(colors)) cols <- colors
+
+  if(bar_chart==TRUE & bar_chart_stacked==FALSE & is.null(legend_names))  legend_names <- as.character(levels(factor(molten$predictor2)))
+  if(is.null(legend_names))  legend_names <- as.character(levels(factor(molten$predictor2)))
+  ordered2<- rev(unique(molten$colvar))
+  if(reverse){
+    if(bar_chart==FALSE) {
+      molten$predictor2 <- factor(molten$predictor2, levels=rev(levels(molten$predictor2)))#manual faceting for levels;
+      legend_names <- rev(legend_names)
+      cols <- rev(cols)
+    }
+    if(bar_chart==TRUE) {
+      molten$colvar <- factor(molten$colvar, levels=rev(levels(factor(molten$colvar))))#manual faceting for levels;
+      molten$variable <- factor(molten$variable, levels=rev(levels(factor(molten$variable))))
+      cols <- rev(cols)
+      ordered2<- rev(ordered2)
+    }
+  }
+
+  if(bar_chart){
+    log=FALSE
+    cols  <- c(brewer.pal(8,"Set1"), brewer.pal(7,"Dark2"),brewer.pal(7,"Set2"),brewer.pal(12,"Set3"),brewer.pal(7,"Accent"),brewer.pal(12,"Paired"),"gray")
+    #  ordered <- levels(factor(molten$colvar))
+    if(is.null(color_by) & bar_chart_stacked==FALSE)   cols <- cols[1:length(levels(factor(molten$predictor2)))]
+
+    else cols <- cols[c(1:length(levels(factor(molten$colvar)))-1,length(cols))]
+    if(!is.null(colors)) cols <- colors
+    if(is.null(color_by) & reverse==FALSE) cols <- rev(cols)
+    if(!is.null(color_by) & reverse==TRUE) cols <- rev(cols)
+    if(is.null(facet_wrap))  molten$wrap <- ""
+    molten_mean <- molten %>%
+      dplyr::group_by(variable,predictor2,wrap,colvar) %>%
+      dplyr::summarize(value = mean(value))
+    molten_mean$colvar <- factor(molten_mean$colvar, levels=ordered2)
+  }
+  #Calculate pvalue for outcomes
+  if(p_val==TRUE & ((bar_chart==TRUE & bar_chart_stacked==FALSE) | bar_chart==FALSE) & is.null(color_by)){
+    if(is.null(facet_wrap)) molten$wrap <- ""
+    if(!is.null(facet_wrap)) {
+      pval <- data.frame(pval=pval[gsub('_',' ',pval$variable) %in% ordered,]$pval,p_adjust=pval[gsub('_',' ',pval$variable) %in% ordered,]$p_adjust, variable=gsub('_',' ',pval[gsub('_',' ',pval$variable) %in% ordered,]$variable),wrap=pval[gsub('_',' ',pval$variable) %in% ordered,]$wrap)
+    }
+    else {
+      pval <- data.frame(pval=pval[gsub('_',' ',pval$variable) %in% ordered,]$pval,p_adjust=pval[gsub('_',' ',pval$variable) %in% ordered,]$p_adjust, variable=gsub('_',' ',pval[gsub('_',' ',pval$variable) %in% ordered,]$variable))
+      if(length(pval$variable)-length(ordered)<0) pval <- pval[match(pval$variable,ordered[length(pval$variable)-length(ordered)]),]
+    }
+    pval$predictor2 <- molten$predictor2[1]
+    pval$pval <- ifelse(is.na(pval$pval),1,pval$pval)
+    pval$p_adjust <- ifelse(is.na(pval$p_adjust),1,pval$p_adjust)
+    if(Only_sig){
+      index <- pval[pval$pval<0.05,"variable"]
+      molten <- molten[molten$variable %in% index,]
+      pval <- pval[pval$pval<0.05,]
+    }
+
+    if(stat_out){
+      median_iqr <<- molten %>% dplyr::group_by(variable, predictor2) %>% dplyr::summarize( N = length(value),median = median(value)*100,Q1=quantile(value, 1/4)*100,Q3=quantile(value, 3/4)*100, IQR = IQR(value)) %>% as.data.frame
+      pval_out <<- pval
+      mean_sd <<- molten %>% dplyr::group_by(variable, predictor2) %>% dplyr::summarize( N = length(value),mean = mean(value)*100,sd=sd(value)*100) %>% as.data.frame
+    }
+  }
+  if(bar_chart==FALSE){
+    if(ncol(tax)>=6) molten$value <- molten$value+1e-6 #add pseudocount for log scale 0;
+    else   molten$value <- molten$value+0.001 #add pseudocount for log scale 0;
+    ordered <- levels(factor(molten$colvar))
+    p <- ggplot(molten, aes(x=variable, y=value, fill=predictor2)) +
+      {if(violin){geom_violin(scale = violin_scale,width = 0.65, position=position_dodge(width=0.9),size=1, color="#00000000")} else {geom_boxplot(width = 0.55, position=position_dodge(width=0.8),size=0.3,outlier.size = 0,outlier.color = "grey")}}+
+      {if(violin){stat_summary(fun=median, fun.min = min, fun.max = max, geom="point", size=0.8, color="black", position=position_dodge(width=0.9))} else {stat_summary(fun=median, fun.min = min, fun.max = max, geom="point", size=0.8, color="#00000000", position=position_dodge(width=0.9))}}+ theme_bw() + theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),legend.key = element_blank(),legend.text=element_text(size=12),legend.key.size = unit(0.5, "cm"))+ coord_flip() +xlab(NULL)+ylab(xlabs)+ggtitle(main)
+    if(length(unique(molten$variable))>1) p <- p+ geom_vline(xintercept=seq(1.5, length(unique(molten$variable))-0.5, 1),lwd=0.2, colour="grey")
+
+    p <- p +  scale_fill_manual(values =cols,labels=legend_names) + guides(fill = guide_legend(title=legend_title, reverse = TRUE,override.aes = list(linetype=0, shape=16,color=rev(cols),size=5, bg="white")))
+
+  }
+  if(bar_chart==TRUE){
+    if(bar_chart_stacked==TRUE)
+      p <-  ggplot(molten_mean,aes(x=factor(predictor2,labels=legend_names),y=value, fill=variable)) + theme_bw()+geom_bar(stat="identity")+ theme_bw() + theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),legend.key = element_blank(),axis.title=element_text(size=14),legend.text=element_text(size=12), axis.text = element_text(size = 12),strip.text = element_text(size = 12),legend.key.size = unit(0.5, "cm"),text=element_text(size=12)) +xlab(NULL)+ylab(ylabs)+ggtitle(main) +  scale_fill_manual(values =cols,labels=ordered) + guides(fill = guide_legend(title=NULL))
+    if(bar_chart_stacked==FALSE){
+      if(!is.null(color_by)) p <-   ggplot(molten_mean,aes(x=variable,y=value, fill=colvar,group=wrap))+geom_bar(stat="identity", position = position_dodge(width = 0.95))+ scale_fill_manual(values =cols,labels=ordered2)+ guides(fill = guide_legend(title=color_by))
+      else {
+        p <-   ggplot(molten_mean,aes(x=variable,y=value, fill=predictor2))+geom_bar(stat="identity", position = position_dodge(width = 0.95))+ scale_fill_manual(values =cols,labels=legend_names)+ guides(fill = guide_legend(title=legend_title))
+
+      }
+      p <-  p+ theme_bw()  + theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank(),legend.key = element_blank(),axis.title=element_text(size=14),legend.text=element_text(size=12), axis.text = element_text(size = 12),strip.text = element_text(size = 12),legend.key.size = unit(0.5, "cm"),text=element_text(size=12)) +xlab(NULL)+ylab(ylabs)+ggtitle(main)+ theme(strip.background = element_blank()) +coord_flip()
+    }
+  }
+  if(!is.null(facet_wrap))   {
+    if(is.null(facet_label)) label_names <- levels(factor(samp[,facet_wrap]))
+    if(!is.null(facet_label)) label_names <- facet_label
+    if(facet_n==TRUE){
+      label_names <- samp2 %>%
+        dplyr::group_by(get(facet_wrap)) %>%
+        dplyr::summarise(n = n()) %>%
+        dplyr::mutate(pasted_label = paste0(levels(factor(samp2[,facet_wrap])), ", n = ", n))
+      label_names <- as.character(label_names$pasted_label)
+    }
+    names(label_names) <- levels(factor(samp2[,facet_wrap]))
+
+    p <- p+ facet_grid(~wrap,labeller = labeller(wrap=label_names),scales = "free", space = "free")+ theme(strip.background = element_blank())
+    if(bar_chart==FALSE) p$layers[4:5] <- NULL
+  }
+  if(italic_names==TRUE &  (bar_chart==FALSE | (bar_chart==TRUE & bar_chart_stacked==FALSE)))   p <- p+ theme(axis.text.y=element_text(face = "italic"))
+  if(!is.null(color_by)) {
+    # p <- p + facet_grid(~predictor2, scales = "free", space = "free")
+    if(color_by=="genus" | color_by=="family" | color_by=="species") p <- p+ theme(legend.text=element_text(face = "italic"))
+    if(color_by==type & bar_chart_stacked==FALSE ) p <- p+theme(legend.position="none")
+      }
+
+  if(p_val==TRUE){
+    if(log==FALSE){
+      if(bar_chart==TRUE) pval$y <- max(molten_mean$value)*1.10
+      else pval$y <- max(molten$value)*1.15
+    }
+    else pval$y <-ifelse(log_max==100,10,ifelse(log_max==10,0.126,0.0126))
+    if(p_adjust==TRUE){
+      if(log==FALSE & bar_chart==FALSE) pval$y_adjust <- 1.22
+      if(log==FALSE & bar_chart==TRUE) pval$y_adjust <- max(molten_mean$value)*1.25
+      if(log==TRUE) pval$y_adjust <- ifelse(log_max==100,105,ifelse(log_max==10,1.26,0.126))
+    }
+  }
+  if(log==TRUE){
+    if(p_val==FALSE){
+      if(log_max == 100)  p <- p+ scale_y_log10(breaks=c(.000001,.001,.01,.1,1),labels=c("0%","0.1%","1%","10%","100%"))
+      if(log_max == 10)  p <- p+ scale_y_log10(limits=c(0.001,0.13),breaks=c(.001,.01,.05,.1),labels=c("0%","1%","5%","10%"))
+      if(log_max == 1)  p <- p+ scale_y_log10(limits=c(0.001,0.013),breaks=c(.001,.01),labels=c("0%","1%"))
+    }
+    if(p_val==TRUE){
+      if(p_adjust){
+        if(log_max == 100)  p <- p+ scale_y_log10(breaks=c(.000001,.001,.01,.1,1,7,70),labels=c("0%","0.1%","1%","10%","100%", "P-value", "q-value"))
+        if(log_max == 10)  p <- p+ scale_y_log10(breaks=c(.001,.01,.05,0.1,0.126,1.26),labels=c("0%","1%","5%","10%", "P-value", "q-value"))
+        if(log_max == 1)  p <- p+ scale_y_log10(breaks=c(.001,.01,0.0126,0.126),labels=c("0%","1%", "P-value", "q-value"))
+      }
+      else{
+        if(log_max == 100)  p <- p+ scale_y_log10(breaks=c(.000001,.001,.01,.1,1,7),labels=c("0%","0.1%","1%","10%","100%", "P-value"))
+        if(log_max == 10)  p <- p+ scale_y_log10(breaks=c(.001,.01,.05,0.10,0.126),labels=c("0%","1%","5%","10%", "P-value"))
+        if(log_max == 1)  p <- p+ scale_y_log10(breaks=c(.001,.01,0.0126),labels=c("0%","1%", "P-value"))
+      }
+    }
+  }
+  if(log==FALSE){
+    if(p_val==FALSE) p <- p + scale_y_continuous(breaks=c(0,.25,.50,.75,1),labels=c("0%","25%","50%","75%","100%"))
+    if(p_val==TRUE){
+      if(p_adjust==TRUE) p <- p + scale_y_continuous(breaks=c(0,.25,.50,.75,1,1.12,1.20),labels=c("0%","25%","50%","75%","100%", "P-value", "q-value"))
+      if(p_adjust==FALSE) p <- p + scale_y_continuous(breaks=c(0,.25,.50,.75,1,1.12),labels=c("0%","25%","50%","75%","100%", "P-value"))
+    }
+  }
+
+  p <-  p+ theme(plot.background = element_blank(),panel.background = element_blank(),plot.title = element_text(hjust = 0.5))
+  if (bar_chart==TRUE & bar_chart_stacked==FALSE & percent==TRUE)  p <- p+  geom_text(aes(label = paste0(sprintf("%.2f",value*100), "%")), hjust = -.12, position=position_dodge(width=0.95))+scale_y_continuous(limits=c(0,max(molten_mean$value)+0.2),labels = scales::percent)
+  if(no_legends) p <- p + theme(legend.position="none")
+  if(no_names)  p <- p + theme(axis.text.y=element_blank(),axis.ticks.y=element_blank())
+  stars.pval <- function (p.value)
+  {    unclass(symnum(p.value, corr = FALSE, na = FALSE, cutpoints = c(0, 0.001, 0.01, 0.05, 1), symbols = c("***", "**",  "*", "NS")))
+  }
+  if(p_stars==TRUE & p_val==TRUE) p <- p + geom_text(data=pval,aes(x=variable,y=y,label=paste(stars.pval(pval))) ,size=3,hjust=1)
+
+  if(p_stars==FALSE & p_val==TRUE & (bar_chart==FALSE | (bar_chart==TRUE & bar_chart_stacked==FALSE))){
+    p <- p + geom_text(data=pval,aes(x=variable,y=y,label=ifelse(pval<0.05, paste(format.pval(pval,1,0.001,nsmall=3)),"")) ,size=3,hjust=1,fontface="bold")
+    p <- p + geom_text(data=pval,aes(x=variable,y=y,label=ifelse(pval>=0.05, paste(format.pval(pval,1,0.001,nsmall=3)),"")) ,size=3,hjust=1)
+    if(p_adjust){
+      p <- p + geom_text(data=pval,aes(x=variable,y=y_adjust,label=ifelse(p_adjust<0.05, paste(format.pval(p_adjust,1,0.001,nsmall=3)),"")) ,size=3,hjust=1,fontface="bold")
+      p <- p + geom_text(data=pval,aes(x=variable,y=y_adjust,label=ifelse(p_adjust>=0.05, paste(format.pval(p_adjust,1,0.001,nsmall=3)),"")) ,size=3,hjust=1)
+    }
+  }
+  p
+}
+```
+
+Relative abundances in the salmon samples. Comparison among the 20 most abundant bacterial genera. Relative abundance of each genus is shown with respect to different dosage of diet compared to control samples, and stratified by sample type. P-values correspond to Wilcoxon rank-sum tests of the relative abundances, with significant values (P < 0.05) bolded. A pseudocount (+1e−06) was added to all abundances for the log-scale presentation. The black dots indicate median values and the abundances are colored according to the diet.
+
+```{r message=FALSE, warning=FALSE, eval=FALSE}
+p3 <- rabuplot(phylo_ob = psdata.r, predictor= "New_Diet", type = "Genus", facet_wrap   ="sampleType")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
