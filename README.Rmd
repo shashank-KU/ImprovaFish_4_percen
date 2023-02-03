@@ -15,7 +15,7 @@ To meet future food demands, more efficient and sustainable animal production sy
 
 
 ## Getting Started
-### Step 1. Package dependencies
+### Step 1. Package dependencies in R
 Installing R packages can be done through various sources such as GitHub, the Comprehensive R Archive Network (CRAN), or by following the official website of the package.
 
 To install a package from GitHub, use the devtools package and the `install_github()` function. For example, to install the "ggplot2" package from GitHub, run the following code:
@@ -39,7 +39,7 @@ Primers were removed from the raw paired-end FASTQ files generated via MiSeq usi
 
 The code is a shell script for processing paired-end sequencing data in order to perform a microbial analysis. It uses a combination of bash commands and QIIME2 (Quantitative Insights Into Microbial Ecology) commands.
 
-```
+``` {r eval = FALSE}
 ls -d -1 data/*_R1* > forward.txt
 ls -d -1 data/*_R2* > reverse.txt
 
@@ -104,10 +104,11 @@ qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads silva_99
 All downstream analyses were performed on this normalized ASVs table unless mentioned. We used two alpha diversity indices, i.e., observed richness and Shannon diversity index. Furthermore, beta diversity was calculated using weighted and unweighted UniFrac metric and visualized by principal coordinates analysis (PCoA). Alpha and beta diversity was calculated using phyloseq v1.38.0 and visualized with ggplot2 v3.3.5 in R v4.1.1. Comparison of community richness and diversity was assessed by the Kruskal-Wallis test between all the groups, and comparison between the two groups was done by Wilcoxon test with Benjamini-Hochberg FDR multiple test correction. Significance testing between the groups for beta diversity was assessed using permutational multivariate analysis of variance (PERMANOVA) using the “vegan” package.
 
 ### Step 3. Downstream analysis with R
-
 We require several packages-
 
-```
+
+
+```{r warning=FALSE, message=FALSE}
 library("ranacapa")
 library("phyloseq")
 library("ggplot2")
@@ -132,5 +133,30 @@ library("decontam")
 library("RColorBrewer")
 library("ampvis2")
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
