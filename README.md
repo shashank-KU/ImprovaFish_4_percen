@@ -32,36 +32,10 @@ Finally, to install a package from its official website, download the package so
 ```
 install.packages("path/to/reshape2_package.tar.gz", repos = NULL, type = "source")
 ```
-It is recommended to regularly update the installed packages to ensure compatibility and to benefit from new features and bug fixes. We require several packages-
+It is recommended to regularly update the installed packages to ensure compatibility and to benefit from new features and bug fixes.
 
-```
-library("ranacapa")
-library("phyloseq")
-library("ggplot2")
-library("stringr")
-library("plyr")
-library("reshape2")
-library("reshape")
-library("dplyr")
-library("tidyr")
-library("doBy")
-library("plyr")
-library("microbiome")
-library("ggpubr")
-library("vegan")
-library("tidyverse")
-library("magrittr")
-library("cowplot")
-library("dendextend")
-library("WGCNA")
-library("metagenomeSeq")
-library("decontam")
-library("RColorBrewer")
-library("ampvis2")
-```
-
-### Step 2. Metagenomics
-Primers were removed from the raw paired-end FASTQ files generated via MiSeq using “cutadapt”. Further, reads were analyzed by QIIME2 (qiime2-2021.8) pipeline through dada2 to infer the ASVs present and their relative abundances across the samples. For bed dust samples, using read quality scores for the dataset, forward and reverse reads were truncated at 280 bp and 260 bp, followed by trimming the 5′ end till 25 bp for both forward and reverse reads, respectively; other quality parameters used dada2 default values for both 16S rRNA gene sequencing. For 16S rRNA gene sequencing, taxonomy was assigned using a pre-trained Naïve Bayes classifier (Silva database, release 138, 99% ASV) were used.
+### Step 2. Shell script
+Primers were removed from the raw paired-end FASTQ files generated via MiSeq using “cutadapt”. Further, reads were analyzed by QIIME2 (qiime2-2021.8) pipeline through dada2 to infer the ASVs present and their relative abundances across the samples. For bed dust samples, using read quality scores for the dataset, forward and reverse reads were truncated at 280 bp and 260 bp, followed by trimming the 5′ end till 25 bp for both forward and reverse reads, respectively; other quality parameters used dada2 default values for both 16S rRNA gene sequencing. For 16S rRNA gene sequencing, taxonomy was assigned using a pre-trained Naïve Bayes classifier (Silva database, release 138, 99% ASV) were used.
 
 The code is a shell script for processing paired-end sequencing data in order to perform a microbial analysis. It uses a combination of bash commands and QIIME2 (Quantitative Insights Into Microbial Ecology) commands.
 
@@ -129,5 +103,34 @@ qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads silva_99
 
 All downstream analyses were performed on this normalized ASVs table unless mentioned. We used two alpha diversity indices, i.e., observed richness and Shannon diversity index. Furthermore, beta diversity was calculated using weighted and unweighted UniFrac metric and visualized by principal coordinates analysis (PCoA). Alpha and beta diversity was calculated using phyloseq v1.38.0 and visualized with ggplot2 v3.3.5 in R v4.1.1. Comparison of community richness and diversity was assessed by the Kruskal-Wallis test between all the groups, and comparison between the two groups was done by Wilcoxon test with Benjamini-Hochberg FDR multiple test correction. Significance testing between the groups for beta diversity was assessed using permutational multivariate analysis of variance (PERMANOVA) using the “vegan” package.
 
+### Step 3. Downstream analysis with R
+
+We require several packages-
+
+```
+library("ranacapa")
+library("phyloseq")
+library("ggplot2")
+library("stringr")
+library("plyr")
+library("reshape2")
+library("reshape")
+library("dplyr")
+library("tidyr")
+library("doBy")
+library("plyr")
+library("microbiome")
+library("ggpubr")
+library("vegan")
+library("tidyverse")
+library("magrittr")
+library("cowplot")
+library("dendextend")
+library("WGCNA")
+library("metagenomeSeq")
+library("decontam")
+library("RColorBrewer")
+library("ampvis2")
+```
 
 
