@@ -2,10 +2,11 @@
 title: "ImprovAFish_high_dosage"
 author: "Shashank Gupta"
 date: "2023-02-03"
-output:
+output: 
   html_document:
-    toc: true
-    theme: united
+    toc: true # table of content true
+    toc_depth: 4  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
 ---
 
 
@@ -275,7 +276,7 @@ p2 <- ggboxplot(sampleData, x = "New_Diet", y = "Shannon",
 
 Beta diversity is a term used to refer to the differences in species composition between two different sites or habitats. It is often used to measure how different species are distributed across a landscape. The concept of beta diversity was first proposed by ecologist Robert H. Whittaker in 1960. The measure is used to quantify the variation in species composition between two different sites, such as an island and the mainland. The most commonly used measure for beta diversity is the Bray-Curtis index, which looks at the ratio of shared species between two sites. This index is used to measure the differences in species composition between areas and to identify the importance of certain areas in terms of species diversity.
 
-```{r}
+```{r warning=FALSE, message=FALSE, fig.align='center', fig.width=14, fig.height=14}
 # Calculate PCoA on Bray distance
 PCoA_bray <- ordinate(physeq = all.clean, method = "PCoA", distance = "bray")
 
@@ -298,7 +299,7 @@ plot_grid(bottom_row, PCoA_bray_plot, labels = c('', 'C'), ncol = 1)
 ```
 
 
-```{r}
+```{r warning=FALSE, message=FALSE, fig.align='center'}
 psdata.r<- transform_sample_counts(all.clean, function(x) x / sum(x) )
 Final.RNA <- aggregate_rare(psdata.r, level = "Phylum", detection = 1/100, prevalence = 20/100)
 getPalette = colorRampPalette(brewer.pal(10, "Dark2")) 
