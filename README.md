@@ -74,7 +74,9 @@ echo "Export data from qiime"
 qiime tools export  --input-path table.qza --output-path exported-feature-table
 qiime tools export  --input-path taxonomy.qza --output-path exported-feature-table
 echo "data has been exported"
+```
 change header of taxonomy file
+
 ```
 sed -i "1 s/^.*$/#OTUID\ttaxonomy\tconfidence/" exported-feature-table/taxonomy.tsv
 biom add-metadata -i exported-feature-table/feature-table.biom -o exported-feature-table/feature-table_taxonomy.biom --observation-metadata-fp exported-feature-table/taxonomy.tsv --observation-header OTUID,taxonomy,confidence --sc-separated taxonomy
@@ -84,6 +86,7 @@ echo "Rooted phylogenetic tree saved as: exported-feature-table/tree.nwk"
 qiime tools export  --input-path merged_rep-seqs.qza --output-path exported-feature-table/
 echo "Representative sequences saved as: exported-feature-table/dna-sequences.fasta"
 ```
+
 Training the database
 ```
 wget https://www.arb-silva.de/fileadmin/silva_databases/qiime/Silva_132_release.zip
