@@ -647,21 +647,7 @@ Relative abundances in the salmon samples. Comparison among the 20 most abundant
 p3 <- rabuplot(phylo_ob = psdata.r, predictor= "New_Diet", type = "Genus", facet_wrap   ="sampleType")
 ```
 
-```{r, echo=FALSE, fig.align='center', fig.width=30, fig.height=16}
+
+```{r, out.width = "1200px"}
 knitr::include_graphics("Images/plot3.png")
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
