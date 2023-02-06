@@ -150,7 +150,7 @@ p
 ### Alpha diversity
 Alpha diversity is a measure of the diversity of species within a given area or sample. It can be measured in two different ways: Shannon diversity, which takes into account both the richness and evenness of species in a given sample, or observed richness, which simply counts the total number of species present. Shannon diversity is often used to compare the diversity of different samples, whereas observed richness can be used to compare the diversity of different areas.
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 # Estimate richness of all.clean
 shannon.div <- estimate_richness(all.clean, measures = c("Shannon", "Simpson", "Observed","Chao1"))
 
@@ -224,7 +224,8 @@ bottom_row <- plot_grid(p1, p2, labels = c('A', 'B'), align = 'h', rel_widths = 
 plot_grid(bottom_row, PCoA_bray_plot, labels = c('', 'C'), ncol = 1)
 ```
 
-
+### Taxonomic classification
+Phylum level taxonomic distribution. Bars report the mean abundance for each individual sample. 
 ```{r warning=FALSE, message=FALSE, fig.align='center'}
 psdata.r<- transform_sample_counts(all.clean, function(x) x / sum(x) )
 Final.RNA <- aggregate_rare(psdata.r, level = "Phylum", detection = 1/100, prevalence = 20/100)
@@ -639,12 +640,16 @@ rabuplot <- function(phylo_ob,
 }
 ```
 
+### Differenital abundance
 Relative abundances in the salmon samples. Comparison among the 20 most abundant bacterial genera. Relative abundance of each genus is shown with respect to different dosage of diet compared to control samples, and stratified by sample type. P-values correspond to Wilcoxon rank-sum tests of the relative abundances, with significant values (P < 0.05) bolded. A pseudocount (+1e−06) was added to all abundances for the log-scale presentation. The black dots indicate median values and the abundances are colored according to the diet.
 
 ```{r message=FALSE, warning=FALSE, eval=FALSE}
 p3 <- rabuplot(phylo_ob = psdata.r, predictor= "New_Diet", type = "Genus", facet_wrap   ="sampleType")
 ```
 
+```{r, echo=FALSE, fig.align='center', fig.width=20, fig.height=16}
+knitr::include_graphics("Images/plot3.png")
+```
 
 
 
