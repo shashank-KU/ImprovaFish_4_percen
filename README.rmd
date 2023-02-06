@@ -651,3 +651,14 @@ p3 <- rabuplot(phylo_ob = psdata.r, predictor= "New_Diet", type = "Genus", facet
 ```{r, out.width = "1200px"}
 knitr::include_graphics("Images/plot3.png")
 ```
+
+
+
+
+
+
+
+
+
+
+
