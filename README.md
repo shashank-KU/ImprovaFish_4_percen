@@ -95,7 +95,6 @@ qiime feature-classifier extract-reads --i-sequences silva_99_seqs.qza --p-f-pri
 
 
 qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads silva_99_341F806R.seqs.qza --i-reference-taxonomy silva_99_consensus_taxonomy.qza --o-classifier silva_99_341F806R_classifier.qza --verbose &> silva_99_341F806R_classifier.log
-
 ```
 
 ### Step 3. Downstream analysis in R
