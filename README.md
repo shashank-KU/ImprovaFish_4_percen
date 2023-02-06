@@ -100,7 +100,7 @@ qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads silva_99
 ### Step 3. Downstream analysis in R
 All downstream analyses were performed on this normalized ASVs table unless mentioned. We used two alpha diversity indices, i.e., observed richness and Shannon diversity index. Furthermore, beta diversity was calculated using weighted and unweighted UniFrac metric and visualized by principal coordinates analysis (PCoA). Alpha and beta diversity was calculated using phyloseq v1.38.0 and visualized with ggplot2 v3.3.5 in R v4.1.1. Comparison of community richness and diversity was assessed by the Kruskal-Wallis test between all the groups, and comparison between the two groups was done by Wilcoxon test with Benjamini-Hochberg FDR multiple test correction. Significance testing between the groups for beta diversity was assessed using permutational multivariate analysis of variance (PERMANOVA) using the “vegan” package.
 
-Please follow the [link](README.html) to see all the downstream analysis done in R.
+Please follow the [link](https://shashank-ku.github.io/ImprovaFish_4_percen/README.html) to see all the downstream analysis done in R.
 
 
 # Bugs
