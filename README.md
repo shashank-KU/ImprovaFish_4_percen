@@ -36,7 +36,7 @@ Primers were removed from the raw paired-end FASTQ files generated via MiSeq usi
 
 The code is a shell script for processing paired-end sequencing data in order to perform a microbial analysis. It uses a combination of bash commands and QIIME2 (Quantitative Insights Into Microbial Ecology) commands.
 
-``` {r eval = FALSE}
+```
 ls -d -1 data/*_R1* > forward.txt
 ls -d -1 data/*_R2* > reverse.txt
 
