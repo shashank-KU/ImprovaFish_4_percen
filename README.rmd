@@ -61,7 +61,7 @@ library("RColorBrewer")
 library("ampvis2")
 ```
 
-### import data and clean the taxonomy
+### Import data and clean the taxonomy
 
 ```{r}
 # Load data
